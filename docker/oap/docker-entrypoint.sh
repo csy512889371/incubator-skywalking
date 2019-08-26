@@ -30,10 +30,14 @@ generateClusterZookeeper() {
 cluster:
   zookeeper:
     nameSpace: \${SW_NAMESPACE:""}
-    hostPort: \${SW_CLUSTER_ZK_HOST_PORT:localhost:2181}
+    hostPort: \${SW_CLUSTER_ZK_HOST_PORT:zookeeper:2181}
     #Retry Policy
     baseSleepTimeMs: \${SW_CLUSTER_ZK_SLEEP_TIME:1000} # initial amount of time to wait between retries
     maxRetries: \${SW_CLUSTER_ZK_MAX_RETRIES:3} # max number of times to retry
+    # Enable ACL
+    enableACL: \${SW_ZK_ENABLE_ACL:false} # disable ACL in default
+    schema: \${SW_ZK_SCHEMA:digest} # only support digest schema
+    expression: \${SW_ZK_EXPRESSION:skywalking:skywalking}
 EOT
 }
 
@@ -54,7 +58,7 @@ cluster:
   consul:
     serviceName: \${SW_SERVICE_NAME:"SkyWalking_OAP_Cluster"}
     # Consul cluster nodes, example: 10.0.0.1:8500,10.0.0.2:8500,10.0.0.3:8500
-    hostPort: \${SW_CLUSTER_CONSUL_HOST_PORT:localhost:8500}
+    hostPort: \${SW_CLUSTER_CONSUL_HOST_PORT:consul:8500}
 EOT
 }
 
@@ -64,7 +68,16 @@ cluster:
   etcd:
     serviceName: \${SW_SERVICE_NAME:"SkyWalking_OAP_Cluster"}
     # Etcd cluster nodes, example: 10.0.0.1:2379,10.0.0.2:2379,10.0.0.3:2379
-    hostPort: \${SW_CLUSTER_ETCD_HOST_PORT:localhost:2379}
+    hostPort: \${SW_CLUSTER_ETCD_HOST_PORT:etcd:2379}
+EOT
+}
+
+generateClusterNacos() {
+    cat <<EOT >> ${var_application_file}
+cluster:
+  nacos:
+    serviceName: \${SW_SERVICE_NAME:"SkyWalking_OAP_Cluster"}
+    hostPort: \${SW_CLUSTER_NACOS_HOST_PORT:nacos:8848}
 EOT
 }
 
@@ -74,6 +87,7 @@ storage:
   elasticsearch:
     nameSpace: \${SW_NAMESPACE:""}
     clusterNodes: \${SW_STORAGE_ES_CLUSTER_NODES:localhost:9200}
+    protocol: \${SW_STORAGE_ES_HTTP_PROTOCOL:"http"}
     user: \${SW_ES_USER:""}
     password: \${SW_ES_PASSWORD:""}
     indexShardsNumber: \${SW_STORAGE_ES_INDEX_SHARDS_NUMBER:2}
@@ -111,6 +125,81 @@ storage:
 EOT
 }
 
+generateConfigurationNone() {
+    cat <<EOT >> ${var_application_file}
+configuration:
+  none:
+EOT
+}
+
+generateConfigurationApollo() {
+    cat <<EOT >> ${var_application_file}
+configuration:
+  apollo:
+    apolloMeta: \${SW_CONFIGURATION_APOLLO_META:http://apollo:8080}
+    apolloCluster: \${SW_CONFIGURATION_APOLLO_CLUSTER:default}
+    apolloEnv: \${SW_CONFIGURATION_APOLLO_ENV:""}
+    appId: \${SW_CONFIGURATION_APOLLO_APP_ID:skywalking}
+    period: \${SW_CONFIGURATION_APOLLO_PERIOD:5}
+EOT
+}
+
+generateConfigurationNacos() {
+    cat <<EOT >> ${var_application_file}
+configuration:
+  nacos:
+    # Nacos Server Host
+    serverAddr: \${SW_CONFIGURATION_NACO_SERVER_ADDR:naco}
+    # Nacos Server Port
+    port: \${SW_CONFIGURATION_NACO_PORT:8848}
+    # Nacos Configuration Group
+    group: \${SW_CONFIGURATION_NACO_GROUP:skywalking}
+    # Unit seconds, sync period. Default fetch every 60 seconds.
+    period : \${SW_CONFIGURATION_NACO_PERIOD:5}
+    # the name of current cluster, set the name if you want to upstream system known.
+    clusterName: \${SW_CONFIGURATION_NACO_CLUSTER_NAME:default}
+EOT
+}
+
+generateConfigurationZookeeper() {
+    cat <<EOT >> ${var_application_file}
+configuration:
+  zookeeper:
+    period: \${SW_CONFIGURATION_ZOOKEEPER_PERIOD:60} # Unit seconds, sync period. Default fetch every 60 seconds.
+    nameSpace: \${SW_CONFIGURATION_ZOOKEEPER_NAMESPACE:/default}
+    hostPort: \${SW_CONFIGURATION_ZOOKEEPER_HOST_PATH:localhost:2181}
+    #Retry Policy
+    baseSleepTimeMs: \${SW_CONFIGURATION_ZOOKEEPER_BASE_SLEEP_TIME_MS:1000} # initial amount of time to wait between retries
+    maxRetries: \${SW_CONFIGURATION_ZOOKEEPER_MAX_RETRIES:3}3 # max number of times to retry
+EOT
+}
+
+generateTelemetryNone() {
+    cat <<EOT >> ${var_application_file}
+telemetry:
+  none:
+EOT
+}
+
+generateTelemetryPrometheus() {
+    cat <<EOT >> ${var_application_file}
+telemetry:
+  prometheus:
+    host: \${SW_TELEMETRY_PROMETHEUS_HOST:0.0.0.0}
+    port: \${SW_TELEMETRY_PROMETHEUS_PORT:1234}
+EOT
+}
+
+generateTelemetrySo11y() {
+    cat <<EOT >> ${var_application_file}
+telemetry:
+  so11y:
+    prometheusExporterEnabled: \${SW_TELEMETRY_SO11Y_PROMETHEUS_ENABLED:true}
+    prometheusExporterHost: \${SW_TELEMETRY_PROMETHEUS_HOST:0.0.0.0}
+    prometheusExporterPort: \${SW_TELEMETRY_PROMETHEUS_PORT:1234}
+EOT
+}
+
 validateVariables() {
     name=$1; value=$2; list=$3
     valid=false
@@ -128,11 +217,17 @@ validateVariables() {
 
 generateApplicationYaml() {
     # validate
-    [[ -z "$SW_CLUSTER" ]] && [[ -z "$SW_STORAGE" ]] && { echo "Error: please specify \"SW_CLUSTER\" \"SW_STORAGE\""; exit 1; }
+    [[ -z "$SW_CLUSTER" ]] && [[ -z "$SW_STORAGE" ]] && [[ -z "$SW_CONFIGURATION" ]] \
+        && [[ -z "$SW_TELEMETRY" ]] \
+        && { echo "Error: please specify \"SW_CLUSTER\" \"SW_STORAGE\" \"SW_CONFIGURATION\" \"SW_TELEMETRY\""; exit 1; }
 
-    validateVariables "SW_CLUSTER" "$SW_CLUSTER" "standalone zookeeper kubernetes consul etcd"
+    validateVariables "SW_CLUSTER" "$SW_CLUSTER" "standalone zookeeper kubernetes consul etcd nacos"
 
     validateVariables "SW_STORAGE" "$SW_STORAGE" "elasticsearch h2 mysql"
+
+    validateVariables "SW_CONFIGURATION" "$SW_CONFIGURATION" "none apollo nacos zookeeper"
+
+    validateVariables "SW_TELEMETRY" "$SW_TELEMETRY" "none prometheus so11y"
 
     echo "# Generated by 'docker-entrypoint.sh'" > ${var_application_file}
     #generate cluster
@@ -142,6 +237,7 @@ generateApplicationYaml() {
     kubernetes) generateClusterK8s;;
     consul) generateClusterConsul;;
     etcd) generateClusterEtcd;;
+    nacos) generateClusterNacos;;
     esac
 
     #generate core
@@ -168,6 +264,9 @@ core:
     hourMetricsDataTTL: \${SW_CORE_HOUR_METRIC_DATA_TTL:36} # Unit is hour
     dayMetricsDataTTL: \${SW_CORE_DAY_METRIC_DATA_TTL:45} # Unit is day
     monthMetricsDataTTL: \${SW_CORE_MONTH_METRIC_DATA_TTL:18} # Unit is month
+    # Cache metric data for 1 minute to reduce database queries, and if the OAP cluster changes within that minute,
+    # the metrics may not be accurate within that minute.
+    enableDatabaseSession: \${SW_CORE_ENABLE_DATABASE_SESSION:true}
 EOT
 
     # generate storage
@@ -194,6 +293,8 @@ receiver-jvm:
   default:
 receiver-clr:
   default:
+receiver-so11y:
+  default:
 service-mesh:
   default:
     bufferPath: \${SW_SERVICE_MESH_BUFFER_PATH:../mesh-buffer/}  # Path to trace buffer files, suggest to use absolute path
@@ -207,12 +308,23 @@ query:
     path: \${SW_QUERY_GRAPHQL_PATH:/graphql}
 alarm:
   default:
-telemetry:
-  prometheus:
-    host: \${SW_TELEMETRY_PROMETHEUS_HOST:0.0.0.0}
-    port: \${SW_TELEMETRY_PROMETHEUS_PORT:1234}
-configuration:
-  none:
+EOT
+    # generate telemetry
+    case ${SW_TELEMETRY} in
+    none) generateTelemetryNone;;
+    prometheus) generateTelemetryPrometheus;;
+    so11y) generateTelemetrySo11y;;
+    esac
+
+    # generate configuration
+    case ${SW_CONFIGURATION} in
+    none) generateConfigurationNone;;
+    apollo) generateConfigurationApollo;;
+    nacos) generateConfigurationNacos;;
+    zookeeper) generateConfigurationZookeeper;;
+    esac
+
+    cat <<EOT >> ${var_application_file}
 envoy-metric:
   default:
 EOT
@@ -241,6 +353,13 @@ receiver_jaeger:
 EOT
     fi
 
+    if [[ "$SW_TELEMETRY" = "so11y" ]]; then
+        cat <<EOT >> ${var_application_file}
+receiver-so11y:
+  default:
+EOT
+    fi
+
     if [[ "$SW_EXPORTER_ENABLED" = "true" ]]; then
         cat <<EOT >> ${var_application_file}
 exporter:
@@ -252,6 +371,11 @@ EOT
 }
 
 echo "[Entrypoint] Apache SkyWalking Docker Image"
+
+SW_CLUSTER=${SW_CLUSTER:-standalone}
+SW_STORAGE=${SW_STORAGE:-h2}
+SW_CONFIGURATION=${SW_CONFIGURATION:-none}
+SW_TELEMETRY=${SW_TELEMETRY:-none}
 
 if [[ -z "$SW_L0AD_CONFIG_FILE_FROM_VOLUME" ]] || [[ "$SW_L0AD_CONFIG_FILE_FROM_VOLUME" != "true" ]]; then
     generateApplicationYaml
@@ -267,5 +391,6 @@ do
     CLASSPATH="$i:$CLASSPATH"
 done
 
+set -ex
 exec java -XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap \
      ${JAVA_OPTS} -classpath ${CLASSPATH} org.apache.skywalking.oap.server.starter.OAPServerStartUp "$@"
