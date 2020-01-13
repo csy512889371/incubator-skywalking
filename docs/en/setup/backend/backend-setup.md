@@ -66,6 +66,7 @@ DB. But clearly, it doesn't fit the product env. In here, you could find what ot
 Choose the one you like, we are also welcome anyone to contribute new storage implementor,
 1. [Set receivers](backend-receivers.md). You could choose receivers by your requirements, most receivers
 are harmless, at least our default receivers are. You would set and active all receivers provided.
+1. [Token authentication](backend-token-auth.md). You could add token authentication mechanisms to avoid `OAP` receiving untrusted data.  
 1. Do [trace sampling](trace-sampling.md) at backend. This sample keep the metrics accurate, only don't save some of traces
 in storage based on rate.
 1. Follow [slow DB statement threshold](slow-db-statement.md) config document to understand that, 
@@ -83,6 +84,8 @@ system.
 set the expired time for each dimension.
 1. [Dynamic Configuration](dynamic-config.md). Make configuration of OAP changed dynamic, from remote service
 or 3rd party configuration management system.
+1. [Uninstrumented Gateways](uninstrumented-gateways.md). Configure gateways/proxies that are not supported by SkyWalking agent plugins,
+to reflect the delegation in topology graph.
 
 ## Telemetry for backend
 OAP backend cluster itself underlying is a distributed streaming process system. For helping the Ops team,
